@@ -10,12 +10,19 @@ import (
 
 	"github.com/anaskhan96/soup"
 	"github.com/chromedp/chromedp"
+	"github.com/joho/godotenv"
 )
 
+func init() {
+	godotenv.Load(".env")
+}
+
 func main() {
+	// initiate context for bot
+	headless := false
 
 	opts := append(chromedp.DefaultExecAllocatorOptions[:],
-		chromedp.Flag("headless", false),
+		chromedp.Flag("headless", headless),
 	)
 
 	allocCtx, cancel := chromedp.NewExecAllocator(context.Background(), opts...)
@@ -24,62 +31,63 @@ func main() {
 	ctx, cancel := chromedp.NewContext(allocCtx)
 	defer cancel()
 
-	// // creating chromedp bot
-	// ctx, cancel := chromedp.NewContext(context.Background())
-	// defer cancel()
-
-	// ctx, cancel = context.WithTimeout(ctx, 30*time.Second)
-	// defer cancel()
-
-	// scraping from levels
-	var levelSrc string
-
-	err := chromedp.Run(ctx,
-		chromedp.Navigate(`https://www.levels.fyi/internships/?track=Software%20Engineer&timeframe=2022%20%2F%202021`),
-		// chromedp.ScrollIntoView(`table`),
-		// chromedp.WaitVisible(`table`),
-		chromedp.OuterHTML(`body`, &levelSrc),
-	)
-	if err != nil {
-		log.Fatal(err)
-	}
+	ctx, cancel = context.WithTimeout(ctx, 60*time.Second)
+	defer cancel()
 
 	all_comps := map[string]int{}
 
-	levelCompanies := levelScrape(levelSrc)
-	for _, comp := range levelCompanies {
-		all_comps[comp] = 1
-		continue
-	}
+	// scraping from levels
+	// levelSrc := getLevelsHTML(ctx)
+	// levelCompanies := levelScrape(levelSrc)
+	// for _, comp := range levelCompanies {
+	// 	all_comps[comp] = 1
+	// 	continue
+	// }
 
 	// scraping from pittsc website
-	resp, err := soup.Get("https://github.com/pittcsc/Summer2022-Internships")
-	if err != nil {
-		log.Fatal(err)
-	}
+	// resp, err := soup.Get("https://github.com/pittcsc/Summer2022-Internships")
+	// if err != nil {
+	// 	log.Fatal(err)
+	// }
 
-	pittCompanies := pittScrape(resp)
+	// pittCompanies := pittScrape(resp)
 
-	for _, comp := range pittCompanies {
-		if _, ok := all_comps[comp]; ok {
-			continue
-		} else {
-			all_comps[comp] = 1
-		}
-	}
+	// for _, comp := range pittCompanies {
+	// 	if _, ok := all_comps[comp]; ok {
+	// 		continue
+	// 	} else {
+	// 		all_comps[comp] = 1
+	// 	}
+	// }
 
-	time.Sleep(1 * time.Second)
+	// time.Sleep(1 * time.Second)
 
 	// scrape from discord
-	// var discordLogin string
-	var discordSrc string
+	discordSrc := getDiscordHTML(ctx)
+	discordScrape(discordSrc)
 
-	err = chromedp.Run(ctx,
+	// turn map into arr
+
+	allCompSlice := []string{}
+	for comp := range all_comps {
+		allCompSlice = append(allCompSlice, comp)
+	}
+
+	// for _, c := range allCompSlice {
+	// 	fmt.Println(c)
+	// }
+}
+
+func getDiscordHTML(ctx context.Context) string {
+	var discordSrc string
+	discord_username := os.Getenv("discord_username")
+	discord_password := os.Getenv("discord_password")
+	err := chromedp.Run(ctx,
 		chromedp.Navigate("https://discord.com/channels/@me"),
 		// chromedp.OuterHTML(`body`, &discordLogin),
 
-		chromedp.SendKeys(`//input[@name="email"]`, os.Getenv("discord_username"), chromedp.BySearch),
-		chromedp.SendKeys(`//input[@name="password"]`, os.Getenv("discord_password"), chromedp.BySearch),
+		chromedp.SendKeys(`//input[@name="email"]`, discord_username, chromedp.BySearch),
+		chromedp.SendKeys(`//input[@name="password"]`, discord_password, chromedp.BySearch),
 		chromedp.Click(`//button[@type="submit"]`, chromedp.BySearch),
 	)
 	if err != nil {
@@ -99,7 +107,9 @@ func main() {
 
 	time.Sleep(4 * time.Second)
 
-	for i := 0; i < 6; i++ {
+	amountScrollUp := 10
+
+	for i := 0; i < amountScrollUp; i++ {
 		err = chromedp.Run(ctx,
 			chromedp.ScrollIntoView(`//ol/li[1]`, chromedp.BySearch),
 		)
@@ -117,21 +127,10 @@ func main() {
 		log.Fatal(err)
 	}
 
-	discordScrape(discordSrc)
-
-	// turn map into arr
-	allCompSlice := []string{}
-	for comp := range all_comps {
-		allCompSlice = append(allCompSlice, comp)
-	}
-
-	// for _, c := range allCompSlice {
-	// 	fmt.Println(c)
-	// }
+	return discordSrc
 }
 
 func discordScrape(source string) {
-	fmt.Println(source)
 	doc := soup.HTMLParse(source)
 	listItems := doc.FindAll("li")
 
@@ -150,6 +149,22 @@ func discordScrape(source string) {
 		}
 		fmt.Println(text)
 	}
+}
+
+func getLevelsHTML(ctx context.Context) string {
+	var levelSrc string
+
+	err := chromedp.Run(ctx,
+		chromedp.Navigate(`https://www.levels.fyi/internships/?track=Software%20Engineer&timeframe=2022%20%2F%202021`),
+		// chromedp.ScrollIntoView(`table`),
+		// chromedp.WaitVisible(`table`),
+		chromedp.OuterHTML(`body`, &levelSrc),
+	)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	return levelSrc
 }
 
 func levelScrape(source string) (openSpots []string) {
